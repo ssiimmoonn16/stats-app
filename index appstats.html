@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stats Basket</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#e8590c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stats Basket">
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--card:#f1f1f4;--acc:#e8590c;--ok:#2b8a3e;--ko:#c92a2a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#16161a;--fg:#f0f0f0;--card:#26262d}}
+:root[data-theme="dark"]{--bg:#16161a;--fg:#f0f0f0;--card:#26262d}
+html{color-scheme:light dark}
+body{margin:0;padding:12px;background:var(--bg);color:var(--fg);font:16px system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1000px;margin-inline:auto}
+h1{font-size:20px;margin:0 0 8px}h3{margin:14px 0 4px}
+.score{display:flex;justify-content:space-around;background:var(--card);border-radius:12px;padding:10px;text-align:center}
+.score b{font-size:34px;display:block}
+button{font:inherit;border:0;border-radius:10px;padding:11px 8px;background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}
+button.on{background:var(--acc);color:#fff}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.row>button{flex:1 1 80px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ok{background:var(--ok);color:#fff}.ko{background:var(--ko);color:#fff}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;text-align:center}
+th,td{padding:5px 4px;border-bottom:1px solid var(--card);white-space:nowrap}
+td:first-child,th:first-child{text-align:left}
+input{font:inherit;padding:10px;border-radius:10px;border:1px solid var(--card);background:var(--card);color:var(--fg);min-width:0}
+</style>
+</head>
+<body>
+<h1>🏀 Stats de match</h1>
+<div class="score" id="sc"></div>
+<div class="row" id="ball"></div>
+<div class="row" id="tabs"></div>
+<div class="row" id="pls"></div>
+<div class="row"><input id="nn" placeholder="N°" size="3"><input id="nm" placeholder="Nom du joueur" style="flex:1"><button id="add">Ajouter</button></div>
+<div class="row"><button id="fb">⚡ Contre-attaque</button><button id="last">Dernier LF</button></div>
+<div class="grid" id="acts"></div>
+<div class="row"><button id="undo">↩︎ Annuler</button><button id="copy">Copier en CSV</button><button id="reset">Nouveau match</button></div>
+<h3>Possessions</h3><div class="wrap"><table id="sum"></table></div>
+<div id="box"></div>
+<script>
+const K=['pts','f2m','f2a','f3m','f3a','ftm','fta','oreb','dreb','ast','stl','blk','blkag','tov','tovg','pf','fd','fb'];
+const B=[['2 ✔','2+','ok'],['3 ✔','3+','ok'],['LF ✔','L+','ok'],['Reb off.','OR'],['2 ✘','2-','ko'],['3 ✘','3-','ko'],['LF ✘','L-','ko'],['Reb déf.','DR'],
+['Passe déc.','ast'],['Interception','stl'],['Contre','blk'],['Contre subi','blkag'],['BP bonne','TG'],['BP mauvaise','TB'],['Faute','pf'],['Faute prov.','fd']];
+const mk=()=>({t:[{n:'Équipe A',pl:[]},{n:'Équipe B',pl:[]}],tm:0,sel:null,ball:null,ph:[0,0],pp:[0,0],p1:[0,0],fb:0,last:0,h:[]});
+let S=mk();
+try{const r=localStorage.getItem('sb2');if(r)S=JSON.parse(r)}catch(e){}
+const $=i=>document.getElementById(i);
+const e=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const give=t=>{S.ball=t;S.pp[t]++;S.ph[t]=0};
+const own=t=>{if(S.ball!==t)give(t)};
+function act(c){
+ const t=S.tm,o=1-t,p=S.t[t].pl.find(x=>x.id===S.sel);if(!p)return;
+ S.h.push(JSON.stringify({...S,h:[]}));if(S.h.length>80)S.h.shift();
+ const a=(k,n=1)=>p.s[k]=(p.s[k]||0)+n;
+ const sc=n=>{a('pts',n);if(!S.ph[t])S.p1[t]+=n;if(S.fb)a('fb',n)};
+ if(c=='2+'||c=='3+'){const n=+c[0];own(t);a('f'+n+'m');a('f'+n+'a');sc(n);S.fb=0;give(o)}
+ else if(c=='2-'||c=='3-'){own(t);a('f'+c[0]+'a')}
+ else if(c=='L+'){a('ftm');a('fta');sc(1);if(S.last){S.fb=0;if(S.ball===t)give(o)};S.last=0}
+ else if(c=='L-'){a('fta');S.last=0}
+ else if(c=='OR'){a('oreb');S.ball=t;S.ph[t]=1}
+ else if(c=='DR'){a('dreb');if(S.ball!==t)give(t)}
+ else if(c=='TG'||c=='TB'){own(t);a('tov');if(c=='TG')a('tovg');S.fb=0;give(o)}
+ else a(c);
+ draw()}
+function draw(){
+ const tp=t=>S.t[t].pl.reduce((s,p)=>s+(p.s.pts||0),0);
+ $('sc').innerHTML=[0,1].map(t=>`<div>${S.ball===t?'● ':''}${e(S.t[t].n)}<b>${tp(t)}</b></div>`).join('');
+ const mkb=(box,txt,on,fn,cls)=>{const b=document.createElement('button');b.textContent=txt;if(on)b.className='on';else if(cls)b.className=cls;b.onclick=fn;$(box).append(b)};
+ $('ball').innerHTML='';[0,1].forEach(t=>mkb('ball','Balle à '+S.t[t].n,S.ball===t,()=>{if(S.ball!==t){S.h.push(JSON.stringify({...S,h:[]}));give(t);draw()}}));
+ $('tabs').innerHTML='';[0,1].forEach(t=>mkb('tabs',S.t[t].n,S.tm===t,()=>{S.tm=t;S.sel=null;draw()}));
+ mkb('tabs','✎ Renommer',0,()=>{const n=prompt('Nom de l\u2019équipe',S.t[S.tm].n);if(n){S.t[S.tm].n=n;draw()}});
+ $('pls').innerHTML='';S.t[S.tm].pl.forEach(p=>mkb('pls','#'+p.n+' '+p.name,p.id===S.sel,()=>{S.sel=p.id;draw()}));
+ $('fb').className=S.fb?'on':'';$('last').className=S.last?'on':'';
+ const f=(x,y)=>y?(x/y).toFixed(2):'–';
+ $('sum').innerHTML='<tr><th></th><th>Poss. primaires</th><th>Poss. totales</th><th>Pts</th><th>Pts 1re chance</th><th>Pts/poss. prim.</th><th>Pts/poss. tot.</th><th>Pts CA</th></tr>'+[0,1].map(t=>{
+  const pl=S.t[t].pl,g=k=>pl.reduce((s,p)=>s+(p.s[k]||0),0),tot=S.pp[t]+g('oreb');
+  return `<tr><td>${e(S.t[t].n)}</td><td>${S.pp[t]}</td><td>${tot}</td><td>${g('pts')}</td><td>${S.p1[t]}</td><td>${f(S.p1[t],S.pp[t])}</td><td>${f(g('pts'),tot)}</td><td>${g('fb')}</td></tr>`}).join('');
+ $('box').innerHTML=[0,1].map(t=>`<h3>${e(S.t[t].n)}</h3><div class="wrap"><table><tr>${H.map(h=>'<th>'+h+'</th>').join('')}</tr>${S.t[t].pl.map(p=>'<tr>'+row(p).map((v,i)=>'<td>'+(i?v:e(v))+'</td>').join('')+'</tr>').join('')}</table></div>`).join('');
+ try{localStorage.setItem('sb2',JSON.stringify(S))}catch(x){}}
+const H=['Joueur','PTS','TIR','2PT','3PT','LF','RO','RD','RT','PD','INT','CTR','CS','BP brutes','BP bonnes','FTE','FP','Pts CA','EVAL'];
+function row(p){const s=p.s,g=k=>s[k]||0,fgm=g('f2m')+g('f3m'),fga=g('f2a')+g('f3a'),reb=g('oreb')+g('dreb');
+ return['#'+p.n+' '+p.name,g('pts'),fgm+'/'+fga,g('f2m')+'/'+g('f2a'),g('f3m')+'/'+g('f3a'),g('ftm')+'/'+g('fta'),g('oreb'),g('dreb'),reb,g('ast'),g('stl'),g('blk'),g('blkag'),g('tov'),g('tovg'),g('pf'),g('fd'),g('fb'),
+ g('pts')+reb+g('ast')+g('stl')+g('blk')+g('fd')-(fga-fgm)-(g('fta')-g('ftm'))-g('tov')-g('blkag')-g('pf')]}
+B.forEach(([l,c,k])=>{const b=document.createElement('button');b.textContent=l;if(k)b.className=k;b.onclick=()=>act(c);$('acts').append(b)});
+$('fb').onclick=()=>{S.fb=S.fb?0:1;draw()};
+$('last').onclick=()=>{S.last=S.last?0:1;draw()};
+$('add').onclick=()=>{const name=$('nm').value.trim();if(!name)return;const id=Date.now();
+ S.t[S.tm].pl.push({id,n:$('nn').value.trim()||'-',name,s:{}});S.sel=id;$('nm').value='';$('nn').value='';draw()};
+$('undo').onclick=()=>{const x=S.h.pop();if(x){S=Object.assign(JSON.parse(x),{h:S.h});draw()}};
+$('copy').onclick=async()=>{const rows=[H.concat('Équipe')];S.t.forEach(t=>t.pl.forEach(p=>rows.push(row(p).concat(t.n))));
+ [0,1].forEach(t=>rows.push(['Poss. prim. '+S.t[t].n,S.pp[t]]));
+ const txt=rows.map(r=>r.join(';')).join('\n');try{await navigator.clipboard.writeText(txt);$('copy').textContent='Copié ✓'}catch(x){prompt('Copiez ce CSV :',txt)}};
+$('reset').onclick=()=>{if(confirm('Effacer le match en cours ?')){S=mk();draw()}};
+draw();
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
